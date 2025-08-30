@@ -1,33 +1,41 @@
 import streamlit as st
 import sys
 import subprocess
-import importlib
+import os
 
 # Function to install missing packages
 def install_package(package):
     subprocess.check_call([sys.executable, "-m", "pip", "install", package])
 
-# Try to import required packages, install if missing
-try:
-    import torch
-except ImportError:
-    st.warning("Installing torch...")
-    install_package("torch")
-    import torch
+# Check and install required packages
+required_packages = [
+    "streamlit>=1.28.0",
+    "torch>=2.5.0", 
+    "transformers>=4.45.0",
+    "accelerate>=0.35.0",
+    "peft>=0.14.0",
+    "sentencepiece>=0.2.0"
+]
 
-try:
-    from transformers import AutoTokenizer, AutoModelForCausalLM
-except ImportError:
-    st.warning("Installing transformers...")
-    install_package("transformers")
-    from transformers import AutoTokenizer, AutoModelForCausalLM
+for package in required_packages:
+    try:
+        if "streamlit" in package:
+            import streamlit
+        elif "torch" in package:
+            import torch
+        elif "transformers" in package:
+            from transformers import AutoTokenizer, AutoModelForCausalLM
+        elif "peft" in package:
+            from peft import PeftModel, PeftConfig
+    except ImportError:
+        package_name = package.split(">")[0].split("=")[0]
+        st.warning(f"Installing {package_name}...")
+        install_package(package_name)
 
-try:
-    from peft import PeftModel, PeftConfig
-except ImportError:
-    st.warning("Installing peft...")
-    install_package("peft")
-    from peft import PeftModel, PeftConfig
+# Now import properly
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
+from peft import PeftModel, PeftConfig
 
 # Set page config
 st.set_page_config(
@@ -41,7 +49,6 @@ st.title("🤖 Dolly Chatbot")
 st.markdown("Chat with your fine-tuned Dolly model!")
 
 # Check if model files exist
-import os
 if not os.path.exists("dolly_chatbot_model"):
     st.error("Model files not found! Please make sure the 'dolly_chatbot_model' folder exists with all your model files.")
     st.stop()
