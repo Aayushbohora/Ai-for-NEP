@@ -1,8 +1,33 @@
 import streamlit as st
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
-from peft import PeftModel, PeftConfig
-import time
+import sys
+import subprocess
+import importlib
+
+# Function to install missing packages
+def install_package(package):
+    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+
+# Try to import required packages, install if missing
+try:
+    import torch
+except ImportError:
+    st.warning("Installing torch...")
+    install_package("torch")
+    import torch
+
+try:
+    from transformers import AutoTokenizer, AutoModelForCausalLM
+except ImportError:
+    st.warning("Installing transformers...")
+    install_package("transformers")
+    from transformers import AutoTokenizer, AutoModelForCausalLM
+
+try:
+    from peft import PeftModel, PeftConfig
+except ImportError:
+    st.warning("Installing peft...")
+    install_package("peft")
+    from peft import PeftModel, PeftConfig
 
 # Set page config
 st.set_page_config(
@@ -15,7 +40,13 @@ st.set_page_config(
 st.title("🤖 Dolly Chatbot")
 st.markdown("Chat with your fine-tuned Dolly model!")
 
-# Initialize session state for model loading
+# Check if model files exist
+import os
+if not os.path.exists("dolly_chatbot_model"):
+    st.error("Model files not found! Please make sure the 'dolly_chatbot_model' folder exists with all your model files.")
+    st.stop()
+
+# Initialize session state
 if 'model_loaded' not in st.session_state:
     st.session_state.model_loaded = False
 if 'tokenizer' not in st.session_state:
@@ -25,7 +56,7 @@ if 'model' not in st.session_state:
 
 @st.cache_resource(show_spinner=False)
 def load_model():
-    """Load the model with caching to avoid reloading on every interaction"""
+    """Load the model with caching"""
     try:
         with st.spinner("Loading model... This may take a minute."):
             # Load tokenizer
@@ -33,20 +64,24 @@ def load_model():
             if tokenizer.pad_token is None:
                 tokenizer.pad_token = tokenizer.eos_token
             
-            # Load the base model config
-            config = PeftConfig.from_pretrained("dolly_chatbot_model")
-            base_model_name = config.base_model_name_or_path
-            
-            # Load base model with memory optimization
-            base_model = AutoModelForCausalLM.from_pretrained(
-                base_model_name,
-                torch_dtype=torch.float16,
-                device_map="auto",
-                low_cpu_mem_usage=True,
-            )
-            
-            # Load LoRA adapter
-            model = PeftModel.from_pretrained(base_model, "dolly_chatbot_model")
+            # Try to load the model directly first
+            try:
+                model = AutoModelForCausalLM.from_pretrained(
+                    "dolly_chatbot_model",
+                    torch_dtype=torch.float16,
+                    device_map="auto",
+                    low_cpu_mem_usage=True,
+                )
+            except:
+                # If direct loading fails, try with PEFT
+                config = PeftConfig.from_pretrained("dolly_chatbot_model")
+                base_model = AutoModelForCausalLM.from_pretrained(
+                    config.base_model_name_or_path,
+                    torch_dtype=torch.float16,
+                    device_map="auto",
+                    low_cpu_mem_usage=True,
+                )
+                model = PeftModel.from_pretrained(base_model, "dolly_chatbot_model")
             
             return tokenizer, model
             
@@ -54,21 +89,19 @@ def load_model():
         st.error(f"Error loading model: {str(e)}")
         return None, None
 
-# Load model only once
+# Load model
 if not st.session_state.model_loaded:
     st.session_state.tokenizer, st.session_state.model = load_model()
     if st.session_state.tokenizer and st.session_state.model:
         st.session_state.model_loaded = True
-        st.success("Model loaded successfully!")
+        st.success("✅ Model loaded successfully!")
     else:
-        st.error("Failed to load model. Please check your model files.")
+        st.error("❌ Failed to load model. Please check your model files.")
+        st.stop()
 
 # Function to generate response
-def generate_response(instruction, input_text="", max_length=150, temperature=0.7):
+def generate_response(instruction, input_text="", max_length=100):
     """Generate a response from the model"""
-    if not st.session_state.model_loaded:
-        return "Model not loaded yet. Please wait..."
-    
     try:
         # Format the prompt
         if input_text.strip():
@@ -84,7 +117,7 @@ def generate_response(instruction, input_text="", max_length=150, temperature=0.
             outputs = st.session_state.model.generate(
                 **inputs,
                 max_new_tokens=max_length,
-                temperature=temperature,
+                temperature=0.7,
                 do_sample=True,
                 pad_token_id=st.session_state.tokenizer.eos_token_id,
                 num_return_sequences=1
@@ -104,11 +137,10 @@ def generate_response(instruction, input_text="", max_length=150, temperature=0.
 # Create sidebar for settings
 with st.sidebar:
     st.header("⚙️ Settings")
-    max_length = st.slider("Max response length", 50, 300, 150)
-    temperature = st.slider("Temperature", 0.1, 1.0, 0.7)
+    max_length = st.slider("Max response length", 50, 200, 100)
     
     st.header("ℹ️ About")
-    st.info("This chatbot uses your fine-tuned Dolly model. Enter an instruction and optional input to get a response.")
+    st.info("This chatbot uses your fine-tuned Dolly model. Enter an instruction to get a response.")
 
 # Main chat interface
 st.header("💬 Chat with Dolly")
@@ -131,27 +163,13 @@ input_text = st.text_area(
 if st.button("Generate Response", type="primary"):
     if instruction.strip():
         with st.spinner("Generating response..."):
-            start_time = time.time()
-            response = generate_response(instruction, input_text, max_length, temperature)
-            end_time = time.time()
+            response = generate_response(instruction, input_text, max_length)
             
             # Display response
             st.subheader("Response:")
             st.write(response)
-            
-            # Show performance info
-            st.caption(f"Generated in {end_time - start_time:.2f} seconds")
     else:
         st.warning("Please enter an instruction first.")
-
-# Example prompts
-with st.expander("💡 Example Prompts"):
-    st.markdown("""
-    - **Creative Writing**: "Write a short poem about artificial intelligence"
-    - **Explanation**: "Explain quantum computing in simple terms"
-    - **Instruction**: "How do I make chocolate chip cookies?"
-    - **Analysis**: "What are the benefits of renewable energy?"
-    """)
 
 # Footer
 st.markdown("---")
