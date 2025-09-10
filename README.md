@@ -24,7 +24,7 @@ It would be great if the community helps improve this model by:
 - Fine-tuning it further on **larger, high-quality chat datasets**  
 - Applying **LoRA / PEFT techniques** for better alignment  
 - Scaling up to **bigger Dolly or GPT-Neo variants** while keeping efficiency in mind  
-
+ if you want to try https://nexoai.streamlit.app/
 ---
 
 ## 🛠️ Running the Assistant
