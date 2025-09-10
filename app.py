@@ -162,4 +162,4 @@ with st.expander("💡 Example Questions to Ask"):
 
 # Footer
 st.markdown("---")
-st.caption("© 2024 Nexo AI Assistant • Created by Aayush Bohora")
+st.caption("© 2025 Nexo AI Assistant • Created by Aayush Bohora")
