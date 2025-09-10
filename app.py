@@ -45,18 +45,17 @@ with st.sidebar:
     """)
     
     st.markdown("---")
-    st.caption("Version 1.1 • Built with Streamlit")
+    st.caption("Version 1.2 • Built with Streamlit")
 
 # Function to clean model responses
-def clean_response(response):
-    response = re.sub(r'[^.!?]+$', '', response)
-    response = re.sub(r'\*\*|\*|__|_', '', response)
-    if response.startswith('1.') and len(response.split('\n')) < 3:
-        lines = response.split('\n')
-        if len(lines) > 0:
-            response = lines[0].replace('1. ', '', 1)
+def clean_response(response: str) -> str:
+    # Remove unwanted artifacts
     response = response.strip()
-    return response
+    response = re.sub(r"\*\*|\*|__|_", "", response)  # remove markdown
+    # Only take first 4 sentences max
+    sentences = re.split(r'(?<=[.!?]) +', response)
+    response = " ".join(sentences[:4])
+    return response.strip()
 
 # Function to load model
 @st.cache_resource(show_spinner=False)
@@ -109,14 +108,8 @@ def generate_response(user_input, max_length=150, temperature=0.7):
     if not st.session_state.model_loaded:
         return "Model not loaded yet. Please wait..."
     try:
-        if user_input.lower().startswith(('explain', 'what is', 'what are', 'how', 'why')):
-            prompt = f"Please provide a clear and concise explanation for: {user_input}\n\nResponse:"
-        elif user_input.lower().startswith(('write', 'create', 'generate')):
-            prompt = f"Please create the following: {user_input}\n\nResponse:"
-        elif user_input.lower().startswith(('list', 'name some', 'give examples')):
-            prompt = f"Please provide a list for: {user_input}\n\nResponse:"
-        else:
-            prompt = f"Please respond to the following: {user_input}\n\nResponse:"
+        # Force Q&A style prompt
+        prompt = f"Question: {user_input}\nAnswer in simple, clear terms:"
         
         inputs = st.session_state.tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512)
         with torch.no_grad():
@@ -131,8 +124,9 @@ def generate_response(user_input, max_length=150, temperature=0.7):
                 num_return_sequences=1
             )
         response = st.session_state.tokenizer.decode(outputs[0], skip_special_tokens=True)
-        if "Response:" in response:
-            response = response.split("Response:")[1].strip()
+        # Extract only after "Answer"
+        if "Answer" in response:
+            response = response.split("Answer", 1)[1].strip(": ").strip()
         return clean_response(response)
     except Exception as e:
         return f"Error generating response: {str(e)}"
@@ -141,7 +135,7 @@ def generate_response(user_input, max_length=150, temperature=0.7):
 st.header("💬 Chat with Nexo")
 user_input = st.text_area(
     "Enter your question or instruction:",
-    placeholder="e.g., Explain machine learning in simple terms\nor\nWrite a poem about AI\nor\nHow do I make chocolate chip cookies?",
+    placeholder="e.g., What is AI?\nExplain machine learning simply\nWrite a short story about robots",
     height=120,
     key="user_input"
 )
@@ -158,14 +152,12 @@ if st.button("Get Response", type="primary", use_container_width=True):
 # Example prompts
 with st.expander("💡 Example Questions to Ask"):
     st.markdown("""
-    **For best results, try these types of questions:**
+    **For best results, try these:**
     
-    - **Explanation**: "Explain quantum computing in simple terms"
-    - **Creative**: "Write a short story about a robot who becomes human"
-    - **Instructional**: "How do I learn Python programming?"
-    - **Comparative**: "What's the difference between AI and machine learning?"
-    - **Definition**: "What is blockchain technology?"
-    - **List-based**: "List 5 benefits of renewable energy"
+    - "What is AI?"
+    - "Explain quantum computing in simple terms"
+    - "How do I learn Python?"
+    - "List 5 benefits of renewable energy"
     """)
 
 # Footer
